@@ -14,7 +14,7 @@
   <body>
     <main class="game-shell">
       <header class="topbar">
-        <a class="brand" href="#" aria-label="Neon Strike home">
+        <a class="brand" href="#" aria-label="Neon Strike">
           <span class="brand-mark">N</span>
           <span>NEON<span class="brand-accent">STRIKE</span></span>
         </a>
@@ -38,7 +38,7 @@
         <div>
           <p class="eyebrow">ARCADE / SURVIVAL</p>
           <h1>Defend the <span>Grid.</span></h1>
-          <p class="subtitle">Survive the waves. Chase the high score.</p>
+          <p class="subtitle">Survive the waves. Upgrade your firepower.</p>
         </div>
         <div class="status-chip">
           <span class="status-dot"></span>
@@ -59,10 +59,24 @@
           <span class="stat-label">HULL</span>
           <strong id="lives-value">♥ ♥ ♥</strong>
         </article>
-        <article class="stat-card threat-card">
+        <article class="stat-card">
           <span class="stat-label">THREAT LEVEL</span>
           <strong id="threat-value">01</strong>
         </article>
+      </section>
+
+      <section class="round-info" aria-label="Wave and power-up status">
+        <div class="round-item">
+          <span class="stat-label">CURRENT WAVE</span>
+          <strong id="wave-value">01</strong>
+        </div>
+        <div class="round-item powerup-info">
+          <span class="stat-label">POWER-UP</span>
+          <strong id="powerup-value">NONE</strong>
+        </div>
+        <div class="wave-progress" aria-hidden="true">
+          <div id="wave-progress-fill"></div>
+        </div>
       </section>
 
       <section class="game-frame" aria-label="Neon Strike game">
@@ -72,7 +86,7 @@
           height="600"
           aria-label="Game area"
         >
-          Your browser does not support the HTML canvas element.
+          Your browser does not support canvas.
         </canvas>
 
         <div id="game-overlay" class="game-overlay">
@@ -80,7 +94,7 @@
             <p id="overlay-eyebrow" class="eyebrow">SYSTEM READY</p>
             <h2 id="overlay-title">Ready to <span>Strike?</span></h2>
             <p id="overlay-message">
-              Pilot your ship, destroy incoming enemies, and protect the grid.
+              Destroy enemies, survive the waves, and collect power-ups.
             </p>
             <button id="start-button" class="primary-button" type="button">
               START GAME
@@ -140,6 +154,7 @@
         <p><span class="footer-key">MOVE</span> WASD / ARROWS</p>
         <p><span class="footer-key">FIRE</span> SPACE</p>
         <p><span class="footer-key">PAUSE</span> P / ESC</p>
+        <p><span class="footer-key">DROP</span> COLLECT POWER-UPS</p>
       </footer>
     </main>
   </body>

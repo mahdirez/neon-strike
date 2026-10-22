@@ -7,6 +7,9 @@ const scoreValue = document.getElementById("score-value");
 const bestValue = document.getElementById("best-value");
 const livesValue = document.getElementById("lives-value");
 const threatValue = document.getElementById("threat-value");
+const waveValue = document.getElementById("wave-value");
+const powerupValue = document.getElementById("powerup-value");
+const waveProgressFill = document.getElementById("wave-progress-fill");
 
 const overlay = document.getElementById("game-overlay");
 const overlayEyebrow = document.getElementById("overlay-eyebrow");
@@ -25,7 +28,8 @@ const HEIGHT = canvas.height;
 
 const PLAYER_SPEED = 280;
 const PLAYER_SIZE = 15;
-const PLAYER_FIRE_INTERVAL = 0.22;
+const NORMAL_FIRE_INTERVAL = 0.22;
+const RAPID_FIRE_INTERVAL = 0.085;
 const PLAYER_INVULNERABILITY = 1.2;
 
 const INITIAL_SPAWN_INTERVAL = 1.05;
@@ -33,6 +37,8 @@ const MIN_SPAWN_INTERVAL = 0.28;
 const INITIAL_ENEMY_SPEED = 95;
 const MAX_ENEMY_SPEED = 220;
 
+const WAVE_DURATION = 20;
+const POWERUP_DURATION = 8;
 const MAX_PARTICLES = 650;
 const BEST_SCORE_KEY = "neon-strike-best-score";
 
@@ -44,9 +50,12 @@ let score = 0;
 let bestScore = loadBestScore();
 let lives = 3;
 let threatLevel = 1;
+let wave = 1;
 
 let elapsedTime = 0;
+let waveTime = 0;
 let spawnTimer = 0;
+let powerupSpawnTimer = 8;
 let fireTimer = 0;
 let damageCooldown = 0;
 let lastFrameTime = 0;
@@ -58,7 +67,13 @@ let audioContext = null;
 let bullets = [];
 let enemies = [];
 let particles = [];
+let powerups = [];
 let stars = [];
+
+const effects = {
+  rapidFire: 0,
+  shield: 0,
+};
 
 const player = {
   x: WIDTH / 2,
@@ -80,7 +95,7 @@ function saveBestScore() {
   try {
     localStorage.setItem(BEST_SCORE_KEY, String(bestScore));
   } catch {
-    // The game remains playable when storage is unavailable.
+    // Storage is optional.
   }
 }
 
@@ -97,27 +112,43 @@ function updateScore() {
     saveBestScore();
   }
 
-  updateThreatLevel();
-}
-
-function updateThreatLevel() {
   threatLevel = Math.floor(score / 100) + 1;
   threatValue.textContent = String(threatLevel).padStart(2, "0");
 }
 
 function updateLives() {
-  livesValue.textContent = `${"♥ ".repeat(Math.max(0, lives))}`.trim() || "—";
+  livesValue.textContent = "♥ ".repeat(Math.max(0, lives)).trim() || "—";
+}
+
+function updatePowerupUI() {
+  const active = [];
+
+  if (effects.rapidFire > 0) {
+    active.push(`RAPID ${Math.ceil(effects.rapidFire)}s`);
+  }
+
+  if (effects.shield > 0) {
+    active.push(`SHIELD ${Math.ceil(effects.shield)}s`);
+  }
+
+  powerupValue.textContent = active.join(" · ") || "NONE";
 }
 
 function getSpawnInterval() {
+  const waveAdjustment = Math.min(0.25, (wave - 1) * 0.035);
+  const scoreAdjustment = (threatLevel - 1) * 0.055;
+
   return Math.max(
     MIN_SPAWN_INTERVAL,
-    INITIAL_SPAWN_INTERVAL - (threatLevel - 1) * 0.08,
+    INITIAL_SPAWN_INTERVAL - scoreAdjustment - waveAdjustment,
   );
 }
 
 function getEnemySpeed() {
-  return Math.min(MAX_ENEMY_SPEED, INITIAL_ENEMY_SPEED + (threatLevel - 1) * 8);
+  return Math.min(
+    MAX_ENEMY_SPEED,
+    INITIAL_ENEMY_SPEED + (threatLevel - 1) * 8 + (wave - 1) * 5,
+  );
 }
 
 function setStatus(label, mode = "") {
@@ -130,7 +161,7 @@ function showOverlay({ eyebrow, title, message, button, hint }) {
   overlayEyebrow.textContent = eyebrow;
   overlayTitle.innerHTML = title;
   overlayMessage.textContent = message;
-  startButton.textContent = button;
+  startButton.textContent = button || "";
   startButton.hidden = !button;
   overlay.querySelector(".overlay-hint").textContent = hint;
   overlay.classList.remove("is-hidden");
@@ -160,28 +191,44 @@ function clearControls() {
   keys.clear();
   touchControls.clear();
 
-  document.querySelectorAll(".control-button, .fire-button").forEach(button => {
-    button.classList.remove("is-pressed");
-  });
+  document
+    .querySelectorAll(".control-button, .fire-button")
+    .forEach(button => button.classList.remove("is-pressed"));
 }
 
 function resetGame() {
   score = 0;
   lives = 3;
   threatLevel = 1;
+  wave = 1;
+
   elapsedTime = 0;
+  waveTime = 0;
   spawnTimer = 0.45;
+  powerupSpawnTimer = 7;
   fireTimer = 0;
   damageCooldown = 0;
+
+  effects.rapidFire = 0;
+  effects.shield = 0;
 
   bullets = [];
   enemies = [];
   particles = [];
+  powerups = [];
 
   resetPlayer();
   clearControls();
+
   updateScore();
   updateLives();
+  updatePowerupUI();
+  updateWaveUI();
+}
+
+function updateWaveUI() {
+  waveValue.textContent = String(wave).padStart(2, "0");
+  waveProgressFill.style.width = `${Math.min(100, (waveTime / WAVE_DURATION) * 100)}%`;
 }
 
 function startGame() {
@@ -232,6 +279,8 @@ function resumeGame() {
 }
 
 function endGame() {
+  if (state === "gameover") return;
+
   state = "gameover";
   clearControls();
   setStatus("GAME OVER", "over");
@@ -241,7 +290,7 @@ function endGame() {
   showOverlay({
     eyebrow: "MISSION FAILED",
     title: "Grid <span>Compromised.</span>",
-    message: `Final score: ${score}. Best score: ${bestScore}.`,
+    message: `Final score: ${score}. Best score: ${bestScore}. Wave reached: ${wave}.`,
     button: "PLAY AGAIN",
     hint: "PRESS ENTER TO RESTART",
   });
@@ -306,7 +355,7 @@ function playTone(frequency, duration, type = "sine", volume = 0.04) {
     oscillator.start(now);
     oscillator.stop(now + duration);
   } catch {
-    // Audio is optional; continue without sound if the browser blocks it.
+    // Audio is optional.
   }
 }
 
@@ -324,33 +373,86 @@ function isControlPressed(name) {
 }
 
 function fireBullet() {
+  const spread = effects.rapidFire > 0 ? 4 : 0;
+
   bullets.push({
-    x: player.x,
+    x: player.x + (Math.random() - 0.5) * spread,
     y: player.y - player.radius - 7,
     radius: 3,
     speed: 480,
+    damage: 1,
   });
 
   playTone(720, 0.07, "square", 0.018);
 }
 
 function spawnEnemy() {
-  const radius = 12 + Math.random() * 8;
+  const roll = Math.random();
+  let type = "normal";
+
+  if (wave >= 2 && roll > 0.82) {
+    type = "tank";
+  } else if (wave >= 2 && roll > 0.57) {
+    type = "fast";
+  }
+
+  let radius;
+  let speed;
+  let hp;
+  let color;
+  let points;
+
+  if (type === "fast") {
+    radius = 10;
+    speed = getEnemySpeed() * 1.65;
+    hp = 1;
+    color = "#ffd166";
+    points = 15;
+  } else if (type === "tank") {
+    radius = 23;
+    speed = getEnemySpeed() * 0.62;
+    hp = 3;
+    color = "#ff4fa3";
+    points = 30;
+  } else {
+    radius = 15;
+    speed = getEnemySpeed() * (0.8 + Math.random() * 0.4);
+    hp = 1;
+    color = "#a78bfa";
+    points = 10;
+  }
 
   enemies.push({
+    type,
     x: radius + Math.random() * (WIDTH - radius * 2),
     y: -radius - 5,
     radius,
-    speed: getEnemySpeed() * (0.8 + Math.random() * 0.4),
-    drift: (Math.random() - 0.5) * 36,
+    speed,
+    drift: (Math.random() - 0.5) * (type === "fast" ? 75 : 36),
     phase: Math.random() * Math.PI * 2,
-    color: Math.random() > 0.5 ? "#ff4fa3" : "#a78bfa",
+    color,
+    hp,
+    maxHp: hp,
+    points,
+  });
+}
+
+function spawnPowerup(x = Math.random() * (WIDTH - 50) + 25, y = -20) {
+  const types = ["rapid", "shield", "repair"];
+  const type = types[Math.floor(Math.random() * types.length)];
+
+  powerups.push({
+    type,
+    x,
+    y,
+    radius: 12,
+    speed: 75,
+    phase: Math.random() * Math.PI * 2,
   });
 }
 
 function createExplosion(x, y, color, amount = 18) {
-  const available = MAX_PARTICLES - particles.length;
-  const count = Math.min(amount, available);
+  const count = Math.min(amount, MAX_PARTICLES - particles.length);
 
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
@@ -373,6 +475,12 @@ function createExplosion(x, y, color, amount = 18) {
 function damagePlayer() {
   if (state !== "running" || damageCooldown > 0) return;
 
+  if (effects.shield > 0) {
+    createExplosion(player.x, player.y, "#48f2ff", 8);
+    playTone(480, 0.07, "sine", 0.025);
+    return;
+  }
+
   lives -= 1;
   damageCooldown = 0.65;
   player.invulnerable = PLAYER_INVULNERABILITY;
@@ -386,6 +494,28 @@ function damagePlayer() {
   }
 }
 
+function activatePowerup(type) {
+  if (type === "rapid") {
+    effects.rapidFire = Math.max(effects.rapidFire, POWERUP_DURATION);
+    playTone(850, 0.16, "triangle", 0.04);
+  } else if (type === "shield") {
+    effects.shield = Math.max(effects.shield, POWERUP_DURATION);
+    playTone(620, 0.2, "sine", 0.04);
+  } else if (type === "repair") {
+    if (lives < 3) {
+      lives += 1;
+      updateLives();
+      playTone(740, 0.2, "sine", 0.04);
+    } else {
+      score += 20;
+      updateScore();
+      playTone(500, 0.1, "triangle", 0.03);
+    }
+  }
+
+  updatePowerupUI();
+}
+
 function updatePlayer(deltaTime) {
   let dx = 0;
   let dy = 0;
@@ -396,7 +526,7 @@ function updatePlayer(deltaTime) {
   if (isControlPressed("down")) dy += 1;
 
   if (dx !== 0 && dy !== 0) {
-    const magnitude = Math.sqrt(dx * dx + dy * dy);
+    const magnitude = Math.hypot(dx, dy);
     dx /= magnitude;
     dy /= magnitude;
   }
@@ -408,6 +538,7 @@ function updatePlayer(deltaTime) {
     player.radius + 4,
     Math.min(WIDTH - player.radius - 4, player.x),
   );
+
   player.y = Math.max(
     player.radius + 4,
     Math.min(HEIGHT - player.radius - 4, player.y),
@@ -416,20 +547,24 @@ function updatePlayer(deltaTime) {
   player.invulnerable = Math.max(0, player.invulnerable - deltaTime);
   damageCooldown = Math.max(0, damageCooldown - deltaTime);
 
+  effects.rapidFire = Math.max(0, effects.rapidFire - deltaTime);
+  effects.shield = Math.max(0, effects.shield - deltaTime);
+  updatePowerupUI();
+
   fireTimer -= deltaTime;
 
   if (isControlPressed("fire") && fireTimer <= 0) {
     fireBullet();
-    fireTimer = PLAYER_FIRE_INTERVAL;
+    fireTimer =
+      effects.rapidFire > 0 ? RAPID_FIRE_INTERVAL : NORMAL_FIRE_INTERVAL;
   }
 }
 
 function updateBullets(deltaTime) {
   for (let i = bullets.length - 1; i >= 0; i--) {
-    const bullet = bullets[i];
-    bullet.y -= bullet.speed * deltaTime;
+    bullets[i].y -= bullets[i].speed * deltaTime;
 
-    if (bullet.y + bullet.radius < 0) {
+    if (bullets[i].y + bullets[i].radius < 0) {
       bullets.splice(i, 1);
     }
   }
@@ -449,7 +584,6 @@ function updateEnemies(deltaTime) {
     enemy.y += enemy.speed * deltaTime;
     enemy.x +=
       Math.sin(elapsedTime * 1.8 + enemy.phase) * enemy.drift * deltaTime;
-
     enemy.x = Math.max(enemy.radius, Math.min(WIDTH - enemy.radius, enemy.x));
 
     if (enemy.y - enemy.radius > HEIGHT) {
@@ -459,6 +593,51 @@ function updateEnemies(deltaTime) {
       if (state !== "running") return;
     }
   }
+}
+
+function updatePowerups(deltaTime) {
+  for (let i = powerups.length - 1; i >= 0; i--) {
+    const powerup = powerups[i];
+
+    powerup.y += powerup.speed * deltaTime;
+    powerup.x += Math.sin(elapsedTime * 2 + powerup.phase) * 25 * deltaTime;
+
+    if (powerup.y - powerup.radius > HEIGHT) {
+      powerups.splice(i, 1);
+      continue;
+    }
+
+    if (circlesOverlap(player, powerup)) {
+      powerups.splice(i, 1);
+      activatePowerup(powerup.type);
+      createExplosion(powerup.x, powerup.y, getPowerupColor(powerup.type), 14);
+    }
+  }
+
+  powerupSpawnTimer -= deltaTime;
+
+  if (powerupSpawnTimer <= 0) {
+    // Avoid letting uncollected drops fill the entire screen.
+    if (powerups.length < 3) {
+      spawnPowerup();
+    }
+
+    powerupSpawnTimer = 10 + Math.random() * 5;
+  }
+}
+
+function updateWave(deltaTime) {
+  waveTime += deltaTime;
+
+  if (waveTime >= WAVE_DURATION) {
+    waveTime -= WAVE_DURATION;
+    wave += 1;
+
+    createExplosion(WIDTH / 2, 42, "#48f2ff", 24);
+    playTone(580, 0.18, "triangle", 0.04);
+  }
+
+  updateWaveUI();
 }
 
 function updateParticles(deltaTime) {
@@ -497,8 +676,6 @@ function checkCollisions() {
       continue;
     }
 
-    let enemyDestroyed = false;
-
     for (
       let bulletIndex = bullets.length - 1;
       bulletIndex >= 0;
@@ -509,19 +686,33 @@ function checkCollisions() {
       if (!circlesOverlap(enemy, bullet)) continue;
 
       bullets.splice(bulletIndex, 1);
-      enemies.splice(enemyIndex, 1);
+      enemy.hp -= bullet.damage;
 
-      createExplosion(enemy.x, enemy.y, enemy.color, 18);
-      playTone(260, 0.1, "triangle", 0.025);
+      if (enemy.hp <= 0) {
+        enemies.splice(enemyIndex, 1);
+        createExplosion(
+          enemy.x,
+          enemy.y,
+          enemy.color,
+          enemy.type === "tank" ? 30 : 18,
+        );
 
-      score += 10;
-      updateScore();
+        score += enemy.points;
+        updateScore();
 
-      enemyDestroyed = true;
+        playTone(enemy.type === "tank" ? 220 : 300, 0.1, "triangle", 0.025);
+
+        // Small chance for destroyed enemies to drop a power-up.
+        if (Math.random() < 0.12 && powerups.length < 3) {
+          spawnPowerup(enemy.x, enemy.y);
+        }
+      } else {
+        createExplosion(enemy.x, enemy.y, enemy.color, 5);
+        playTone(230, 0.04, "sine", 0.015);
+      }
+
       break;
     }
-
-    if (enemyDestroyed) continue;
   }
 }
 
@@ -546,6 +737,8 @@ function update(deltaTime) {
 
   if (state !== "running") return;
 
+  updatePowerups(deltaTime);
+  updateWave(deltaTime);
   checkCollisions();
   updateParticles(deltaTime);
 }
@@ -606,10 +799,26 @@ function drawPlayer() {
   ctx.save();
   ctx.translate(player.x, player.y);
 
+  if (effects.shield > 0) {
+    ctx.strokeStyle = "rgba(72, 242, 255, 0.8)";
+    ctx.lineWidth = 2;
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = "#48f2ff";
+    ctx.beginPath();
+    ctx.arc(
+      0,
+      0,
+      PLAYER_SIZE + 10 + Math.sin(elapsedTime * 7) * 2,
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+  }
+
   ctx.shadowBlur = 20;
   ctx.shadowColor = "#48f2ff";
-
   ctx.fillStyle = "#48f2ff";
+
   ctx.beginPath();
   ctx.moveTo(0, -PLAYER_SIZE - 5);
   ctx.lineTo(PLAYER_SIZE, PLAYER_SIZE);
@@ -620,6 +829,7 @@ function drawPlayer() {
 
   ctx.shadowBlur = 0;
   ctx.fillStyle = "#eafcff";
+
   ctx.beginPath();
   ctx.moveTo(0, -PLAYER_SIZE + 3);
   ctx.lineTo(5, 7);
@@ -638,8 +848,8 @@ function drawBullets() {
   for (const bullet of bullets) {
     ctx.save();
     ctx.shadowBlur = 14;
-    ctx.shadowColor = "#48f2ff";
-    ctx.fillStyle = "#d9fcff";
+    ctx.shadowColor = effects.rapidFire > 0 ? "#ffd166" : "#48f2ff";
+    ctx.fillStyle = effects.rapidFire > 0 ? "#fff0b5" : "#d9fcff";
     ctx.fillRect(bullet.x - 2, bullet.y - 8, 4, 13);
     ctx.restore();
   }
@@ -649,34 +859,110 @@ function drawEnemies() {
   for (const enemy of enemies) {
     ctx.save();
     ctx.translate(enemy.x, enemy.y);
-    ctx.rotate(elapsedTime * 0.7);
+    ctx.rotate(elapsedTime * (enemy.type === "fast" ? 1.8 : 0.7));
 
     ctx.shadowBlur = 17;
     ctx.shadowColor = enemy.color;
     ctx.strokeStyle = enemy.color;
-    ctx.fillStyle = "rgba(255, 79, 163, 0.12)";
-    ctx.lineWidth = 2;
+    ctx.fillStyle = `${enemy.color}20`;
+    ctx.lineWidth = enemy.type === "tank" ? 3 : 2;
 
-    ctx.beginPath();
+    if (enemy.type === "fast") {
+      ctx.beginPath();
+      ctx.moveTo(0, -enemy.radius - 3);
+      ctx.lineTo(enemy.radius, enemy.radius);
+      ctx.lineTo(0, enemy.radius * 0.5);
+      ctx.lineTo(-enemy.radius, enemy.radius);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      const sides = enemy.type === "tank" ? 8 : 6;
 
-    for (let i = 0; i < 6; i++) {
-      const angle = (Math.PI / 3) * i - Math.PI / 2;
-      const x = Math.cos(angle) * enemy.radius;
-      const y = Math.sin(angle) * enemy.radius;
+      ctx.beginPath();
 
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      for (let i = 0; i < sides; i++) {
+        const angle = (Math.PI * 2 * i) / sides - Math.PI / 2;
+        const x = Math.cos(angle) * enemy.radius;
+        const y = Math.sin(angle) * enemy.radius;
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     }
-
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
 
     ctx.shadowBlur = 0;
     ctx.fillStyle = "#fff0fa";
     ctx.beginPath();
-    ctx.arc(0, 0, 3, 0, Math.PI * 2);
+    ctx.arc(0, 0, enemy.type === "tank" ? 5 : 3, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.restore();
+
+    if (enemy.type === "tank" && enemy.hp < enemy.maxHp) {
+      const barWidth = enemy.radius * 2;
+      const barY = enemy.y - enemy.radius - 9;
+
+      ctx.fillStyle = "rgba(255,255,255,0.15)";
+      ctx.fillRect(enemy.x - barWidth / 2, barY, barWidth, 3);
+
+      ctx.fillStyle = enemy.color;
+      ctx.fillRect(
+        enemy.x - barWidth / 2,
+        barY,
+        barWidth * (enemy.hp / enemy.maxHp),
+        3,
+      );
+    }
+  }
+}
+
+function getPowerupColor(type) {
+  if (type === "rapid") return "#ffd166";
+  if (type === "shield") return "#48f2ff";
+  return "#7dffbb";
+}
+
+function getPowerupSymbol(type) {
+  if (type === "rapid") return "R";
+  if (type === "shield") return "S";
+  return "+";
+}
+
+function drawPowerups() {
+  for (const powerup of powerups) {
+    const color = getPowerupColor(powerup.type);
+
+    ctx.save();
+    ctx.translate(powerup.x, powerup.y);
+    ctx.rotate(Math.sin(elapsedTime * 2 + powerup.phase) * 0.15);
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = color;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = `${color}25`;
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.arc(
+      0,
+      0,
+      powerup.radius + Math.sin(elapsedTime * 5) * 1.5,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = color;
+    ctx.font = "bold 14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(getPowerupSymbol(powerup.type), 0, 1);
 
     ctx.restore();
   }
@@ -692,6 +978,18 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
+function drawWaveBanner() {
+  if (waveTime < 0.15) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, (0.15 - waveTime) * 6);
+    ctx.fillStyle = "#48f2ff";
+    ctx.font = "bold 24px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`WAVE ${String(wave).padStart(2, "0")}`, WIDTH / 2, 52);
+    ctx.restore();
+  }
+}
+
 function drawPauseTint() {
   if (state !== "paused") return;
 
@@ -702,11 +1000,16 @@ function drawPauseTint() {
 function render() {
   drawBackground();
   drawParticles();
+  drawPowerups();
   drawBullets();
   drawEnemies();
 
   if (state !== "gameover") {
     drawPlayer();
+  }
+
+  if (state === "running") {
+    drawWaveBanner();
   }
 
   drawPauseTint();
@@ -849,23 +1152,20 @@ startButton.addEventListener("click", () => {
   }
 });
 
-pauseButton.addEventListener("click", () => {
-  togglePause();
-});
-
+pauseButton.addEventListener("click", togglePause);
 soundButton.addEventListener("click", toggleSound);
 
 makeStars();
 updateScore();
 updateLives();
-render();
-
+updatePowerupUI();
+updateWaveUI();
 setStatus("READY");
 
 showOverlay({
   eyebrow: "SYSTEM READY",
   title: "Ready to <span>Strike?</span>",
-  message: "Pilot your ship, destroy incoming enemies, and protect the grid.",
+  message: "Destroy enemies, survive the waves, and collect power-ups.",
   button: "START GAME",
   hint: "WASD / ARROWS TO MOVE · SPACE TO FIRE",
 });
