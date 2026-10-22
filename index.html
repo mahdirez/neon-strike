@@ -11,26 +11,38 @@
   <body>
     <main class="game-container">
       <header class="game-header">
-        <div>
+        <div class="brand">
           <p class="eyebrow">ARCADE SHOOTER</p>
           <h1>NEON <span>STRIKE</span></h1>
         </div>
 
-        <div class="score-panel">
-          <span>SCORE</span>
-          <strong id="score">000000</strong>
+        <div class="game-stats">
+          <div class="score-panel">
+            <span>SCORE</span>
+            <strong id="score">000000</strong>
+          </div>
+
+          <div class="lives-panel">
+            <span>HULL</span>
+            <strong id="lives">♥ ♥ ♥</strong>
+          </div>
         </div>
       </header>
 
       <section class="game-board" aria-label="Game area">
-        <canvas id="game-canvas" width="800" height="600">
+        <canvas
+          id="game-canvas"
+          width="800"
+          height="600"
+          aria-label="Neon Strike gameplay"
+        >
           Your browser does not support Canvas.
         </canvas>
 
         <div class="game-overlay" id="game-overlay">
-          <p class="eyebrow">SYSTEM READY</p>
-          <h2>READY TO FIGHT?</h2>
-          <p>Prepare your ship. Survive the galaxy.</p>
+          <p class="eyebrow" id="overlay-eyebrow">SYSTEM READY</p>
+          <h2 id="overlay-title">READY TO FIGHT?</h2>
+          <p id="overlay-description">Prepare your ship. Survive the galaxy.</p>
           <button id="start-button" type="button">START GAME</button>
         </div>
       </section>

@@ -2,13 +2,23 @@ const canvas = document.querySelector("#game-canvas");
 const ctx = canvas.getContext("2d");
 
 const scoreElement = document.querySelector("#score");
+const livesElement = document.querySelector("#lives");
 const overlay = document.querySelector("#game-overlay");
+const overlayEyebrow = document.querySelector("#overlay-eyebrow");
+const overlayTitle = document.querySelector("#overlay-title");
+const overlayDescription = document.querySelector("#overlay-description");
 const startButton = document.querySelector("#start-button");
 
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
 
+const INITIAL_LIVES = 3;
+const SHOOT_INTERVAL = 0.22;
+const ENEMY_SPAWN_INTERVAL = 0.9;
+
 const keys = new Set();
+const bullets = [];
+const enemies = [];
 
 const player = {
   x: WIDTH / 2,
@@ -17,24 +27,19 @@ const player = {
   speed: 260,
 };
 
-const bullets = [];
-const enemies = [];
-
-let score = 0;
-let gameStarted = false;
-let lastTime = 0;
-let shootCooldown = 0;
-let spawnTimer = 0;
-
-const SHOOT_INTERVAL = 0.22;
-const ENEMY_SPAWN_INTERVAL = 0.9;
-
 const stars = Array.from({ length: 100 }, () => ({
   x: Math.random() * WIDTH,
   y: Math.random() * HEIGHT,
   size: Math.random() * 2 + 0.5,
   alpha: Math.random() * 0.7 + 0.3,
 }));
+
+let score = 0;
+let lives = INITIAL_LIVES;
+let gameStarted = false;
+let shootCooldown = 0;
+let spawnTimer = 0;
+let lastTime = 0;
 
 function drawBackground() {
   ctx.fillStyle = "#070b19";
@@ -109,7 +114,6 @@ function updateBullets(deltaTime) {
     bullet.y -= bullet.speed * deltaTime;
   }
 
-  // حذف تیرهایی که از صفحه خارج شده‌اند
   for (let i = bullets.length - 1; i >= 0; i--) {
     if (bullets[i].y + bullets[i].radius < 0) {
       bullets.splice(i, 1);
@@ -154,7 +158,6 @@ function updateEnemies(deltaTime) {
     enemy.y += enemy.speed * deltaTime;
   }
 
-  // فعلاً دشمن‌هایی که از پایین صفحه خارج شوند حذف می‌شوند.
   for (let i = enemies.length - 1; i >= 0; i--) {
     if (enemies[i].y - enemies[i].radius > HEIGHT) {
       enemies.splice(i, 1);
@@ -183,35 +186,88 @@ function drawEnemies() {
 }
 
 function checkCollisions() {
-  // از آخر به اول حرکت می‌کنیم تا حذف عناصر باعث
-  // جا افتادن عناصر بعدی در آرایه نشود.
   for (let i = enemies.length - 1; i >= 0; i--) {
     const enemy = enemies[i];
-    let destroyed = false;
 
     for (let j = bullets.length - 1; j >= 0; j--) {
       const bullet = bullets[j];
-
       const dx = enemy.x - bullet.x;
       const dy = enemy.y - bullet.y;
-      const distance = Math.hypot(dx, dy);
 
-      if (distance < enemy.radius + bullet.radius) {
+      if (Math.hypot(dx, dy) < enemy.radius + bullet.radius) {
         enemies.splice(i, 1);
         bullets.splice(j, 1);
 
         score += 10;
         scoreElement.textContent = String(score).padStart(6, "0");
 
-        destroyed = true;
         break;
       }
     }
+  }
+}
 
-    if (destroyed) {
-      continue;
+function updateLives() {
+  livesElement.textContent = Array.from(
+    { length: INITIAL_LIVES },
+    (_, index) => (index < lives ? "♥" : "♡"),
+  ).join(" ");
+}
+
+function checkPlayerCollisions() {
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const enemy = enemies[i];
+    const dx = enemy.x - player.x;
+    const dy = enemy.y - player.y;
+
+    if (Math.hypot(dx, dy) < enemy.radius + player.radius) {
+      enemies.splice(i, 1);
+      lives -= 1;
+      updateLives();
+
+      if (lives <= 0) {
+        endGame();
+        return;
+      }
     }
   }
+}
+
+function endGame() {
+  gameStarted = false;
+  keys.clear();
+
+  overlayEyebrow.textContent = "MISSION FAILED";
+  overlayTitle.textContent = "GAME OVER";
+  overlayDescription.textContent = `Final score: ${score}`;
+  startButton.textContent = "PLAY AGAIN";
+
+  overlay.hidden = false;
+}
+
+function startGame() {
+  bullets.length = 0;
+  enemies.length = 0;
+  keys.clear();
+
+  player.x = WIDTH / 2;
+  player.y = HEIGHT / 2;
+
+  score = 0;
+  lives = INITIAL_LIVES;
+  shootCooldown = 0;
+  spawnTimer = 0;
+
+  scoreElement.textContent = "000000";
+  updateLives();
+
+  gameStarted = true;
+
+  overlayEyebrow.textContent = "SYSTEM ONLINE";
+  overlayTitle.textContent = "READY TO FIGHT?";
+  overlayDescription.textContent = "Survive the galaxy.";
+  startButton.textContent = "START GAME";
+  overlay.hidden = true;
 }
 
 function update(deltaTime) {
@@ -235,6 +291,7 @@ function update(deltaTime) {
 
   updateEnemies(deltaTime);
   checkCollisions();
+  checkPlayerCollisions();
 }
 
 function render(timestamp = 0) {
@@ -257,19 +314,19 @@ function render(timestamp = 0) {
 window.addEventListener("keydown", event => {
   const key = event.key.toLowerCase();
 
-  if (
-    [
-      "w",
-      "a",
-      "s",
-      "d",
-      "arrowup",
-      "arrowdown",
-      "arrowleft",
-      "arrowright",
-      " ",
-    ].includes(key)
-  ) {
+  const supportedKeys = [
+    "w",
+    "a",
+    "s",
+    "d",
+    "arrowup",
+    "arrowdown",
+    "arrowleft",
+    "arrowright",
+    " ",
+  ];
+
+  if (supportedKeys.includes(key)) {
     event.preventDefault();
     keys.add(key);
   }
@@ -283,9 +340,7 @@ window.addEventListener("blur", () => {
   keys.clear();
 });
 
-startButton.addEventListener("click", () => {
-  gameStarted = true;
-  overlay.hidden = true;
-});
+startButton.addEventListener("click", startGame);
 
+updateLives();
 render();

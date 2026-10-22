@@ -18,6 +18,10 @@ body {
   background: radial-gradient(ellipse at top, #17234a 0%, #080b18 65%);
 }
 
+button {
+  font: inherit;
+}
+
 .game-container {
   width: min(100%, 800px);
 }
@@ -51,13 +55,21 @@ h1 span {
   color: #44f0db;
 }
 
-.score-panel {
+.game-stats {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.score-panel,
+.lives-panel {
   display: grid;
   gap: 8px;
   text-align: right;
 }
 
-.score-panel span {
+.score-panel span,
+.lives-panel span {
   font-size: 11px;
   letter-spacing: 2px;
   color: #8b95b8;
@@ -67,6 +79,13 @@ h1 span {
   color: #44f0db;
   font-size: 24px;
   font-variant-numeric: tabular-nums;
+}
+
+.lives-panel strong {
+  color: #ff477e;
+  font-size: 20px;
+  letter-spacing: 3px;
+  white-space: nowrap;
 }
 
 .game-board {
@@ -95,6 +114,10 @@ canvas {
   text-align: center;
   background: #080b18b8;
   backdrop-filter: blur(5px);
+}
+
+.game-overlay[hidden] {
+  display: none;
 }
 
 .game-overlay h2 {
@@ -160,11 +183,20 @@ kbd {
     align-items: flex-start;
   }
 
+  .game-stats {
+    gap: 12px;
+  }
+
+  .score-panel strong {
+    font-size: 19px;
+  }
+
+  .lives-panel strong {
+    font-size: 15px;
+    letter-spacing: 1px;
+  }
+
   .game-footer {
     font-size: 10px;
   }
-}
-
-.game-overlay[hidden] {
-  display: none;
 }
