@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080b18" />
+    <title>Neon Strike</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="game.js" defer></script>
+  </head>
+  <body>
+    <main class="game-container">
+      <header class="game-header">
+        <div>
+          <p class="eyebrow">ARCADE SHOOTER</p>
+          <h1>NEON <span>STRIKE</span></h1>
+        </div>
+
+        <div class="score-panel">
+          <span>SCORE</span>
+          <strong id="score">000000</strong>
+        </div>
+      </header>
+
+      <section class="game-board" aria-label="Game area">
+        <canvas id="game-canvas" width="800" height="600">
+          Your browser does not support Canvas.
+        </canvas>
+
+        <div class="game-overlay" id="game-overlay">
+          <p class="eyebrow">SYSTEM READY</p>
+          <h2>READY TO FIGHT?</h2>
+          <p>Prepare your ship. Survive the galaxy.</p>
+          <button id="start-button" type="button">START GAME</button>
+        </div>
+      </section>
+
+      <footer class="game-footer">
+        <p>MOVE <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></p>
+        <p>SHOOT <kbd>SPACE</kbd></p>
+      </footer>
+    </main>
+  </body>
+</html>
