@@ -16,18 +16,34 @@
           <h1>NEON <span>STRIKE</span></h1>
         </div>
 
-        <div class="game-stats">
-          <div class="score-panel">
-            <span>SCORE</span>
-            <strong id="score">000000</strong>
-          </div>
-
-          <div class="lives-panel">
-            <span>HULL</span>
-            <strong id="lives">♥ ♥ ♥</strong>
-          </div>
-        </div>
+        <button
+          class="sound-button"
+          id="sound-button"
+          type="button"
+          aria-pressed="true"
+          aria-label="Mute sound"
+        >
+          <span id="sound-icon">♪</span>
+          <span id="sound-label">SOUND ON</span>
+        </button>
       </header>
+
+      <section class="stats-bar" aria-label="Game statistics">
+        <div class="stat-card">
+          <span>SCORE</span>
+          <strong id="score">000000</strong>
+        </div>
+
+        <div class="stat-card">
+          <span>BEST</span>
+          <strong id="best-score">000000</strong>
+        </div>
+
+        <div class="stat-card lives-card">
+          <span>HULL</span>
+          <strong id="lives">♥ ♥ ♥</strong>
+        </div>
+      </section>
 
       <section class="game-board" aria-label="Game area">
         <canvas
@@ -42,7 +58,7 @@
         <div class="game-overlay" id="game-overlay">
           <p class="eyebrow" id="overlay-eyebrow">SYSTEM READY</p>
           <h2 id="overlay-title">READY TO FIGHT?</h2>
-          <p id="overlay-description">Prepare your ship. Survive the galaxy.</p>
+          <p id="overlay-description">Destroy enemies. Beat your high score.</p>
           <button id="start-button" type="button">START GAME</button>
         </div>
       </section>
@@ -50,6 +66,7 @@
       <footer class="game-footer">
         <p>MOVE <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></p>
         <p>SHOOT <kbd>SPACE</kbd></p>
+        <p class="difficulty-label">THREAT <span id="threat-level">01</span></p>
       </footer>
     </main>
   </body>
