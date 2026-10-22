@@ -2,71 +2,144 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#080b18" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#070b16" />
     <title>Neon Strike</title>
     <link rel="stylesheet" href="style.css" />
     <script src="game.js" defer></script>
   </head>
   <body>
-    <main class="game-container">
-      <header class="game-header">
-        <div class="brand">
-          <p class="eyebrow">ARCADE SHOOTER</p>
-          <h1>NEON <span>STRIKE</span></h1>
-        </div>
+    <main class="game-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Neon Strike home">
+          <span class="brand-mark">N</span>
+          <span>NEON<span class="brand-accent">STRIKE</span></span>
+        </a>
 
-        <button
-          class="sound-button"
-          id="sound-button"
-          type="button"
-          aria-pressed="true"
-          aria-label="Mute sound"
-        >
-          <span id="sound-icon">♪</span>
-          <span id="sound-label">SOUND ON</span>
-        </button>
+        <div class="topbar-actions">
+          <button id="sound-button" class="utility-button" type="button">
+            SOUND: ON
+          </button>
+          <button
+            id="pause-button"
+            class="utility-button"
+            type="button"
+            disabled
+          >
+            PAUSE
+          </button>
+        </div>
       </header>
 
-      <section class="stats-bar" aria-label="Game statistics">
-        <div class="stat-card">
-          <span>SCORE</span>
-          <strong id="score">000000</strong>
+      <section class="game-heading">
+        <div>
+          <p class="eyebrow">ARCADE / SURVIVAL</p>
+          <h1>Defend the <span>Grid.</span></h1>
+          <p class="subtitle">Survive the waves. Chase the high score.</p>
         </div>
-
-        <div class="stat-card">
-          <span>BEST</span>
-          <strong id="best-score">000000</strong>
-        </div>
-
-        <div class="stat-card lives-card">
-          <span>HULL</span>
-          <strong id="lives">♥ ♥ ♥</strong>
+        <div class="status-chip">
+          <span class="status-dot"></span>
+          <span id="status-label">READY</span>
         </div>
       </section>
 
-      <section class="game-board" aria-label="Game area">
+      <section class="stats" aria-label="Game statistics">
+        <article class="stat-card">
+          <span class="stat-label">SCORE</span>
+          <strong id="score-value">000000</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">BEST</span>
+          <strong id="best-value">000000</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">HULL</span>
+          <strong id="lives-value">♥ ♥ ♥</strong>
+        </article>
+        <article class="stat-card threat-card">
+          <span class="stat-label">THREAT LEVEL</span>
+          <strong id="threat-value">01</strong>
+        </article>
+      </section>
+
+      <section class="game-frame" aria-label="Neon Strike game">
         <canvas
           id="game-canvas"
           width="800"
           height="600"
-          aria-label="Neon Strike gameplay"
+          aria-label="Game area"
         >
-          Your browser does not support Canvas.
+          Your browser does not support the HTML canvas element.
         </canvas>
 
-        <div class="game-overlay" id="game-overlay">
-          <p class="eyebrow" id="overlay-eyebrow">SYSTEM READY</p>
-          <h2 id="overlay-title">READY TO FIGHT?</h2>
-          <p id="overlay-description">Destroy enemies. Beat your high score.</p>
-          <button id="start-button" type="button">START GAME</button>
+        <div id="game-overlay" class="game-overlay">
+          <div class="overlay-panel">
+            <p id="overlay-eyebrow" class="eyebrow">SYSTEM READY</p>
+            <h2 id="overlay-title">Ready to <span>Strike?</span></h2>
+            <p id="overlay-message">
+              Pilot your ship, destroy incoming enemies, and protect the grid.
+            </p>
+            <button id="start-button" class="primary-button" type="button">
+              START GAME
+            </button>
+            <p class="overlay-hint">WASD / ARROWS TO MOVE · SPACE TO FIRE</p>
+          </div>
         </div>
       </section>
 
+      <section class="mobile-controls" aria-label="Touch controls">
+        <div class="movement-pad">
+          <button
+            class="control-button control-up"
+            data-control="up"
+            aria-label="Move up"
+            type="button"
+          >
+            ▲
+          </button>
+          <button
+            class="control-button control-left"
+            data-control="left"
+            aria-label="Move left"
+            type="button"
+          >
+            ◀
+          </button>
+          <button
+            class="control-button control-down"
+            data-control="down"
+            aria-label="Move down"
+            type="button"
+          >
+            ▼
+          </button>
+          <button
+            class="control-button control-right"
+            data-control="right"
+            aria-label="Move right"
+            type="button"
+          >
+            ▶
+          </button>
+        </div>
+        <button
+          id="fire-button"
+          class="fire-button"
+          type="button"
+          aria-label="Fire weapon"
+        >
+          <span class="fire-icon">✦</span>
+          <span>FIRE</span>
+        </button>
+      </section>
+
       <footer class="game-footer">
-        <p>MOVE <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></p>
-        <p>SHOOT <kbd>SPACE</kbd></p>
-        <p class="difficulty-label">THREAT <span id="threat-level">01</span></p>
+        <p><span class="footer-key">MOVE</span> WASD / ARROWS</p>
+        <p><span class="footer-key">FIRE</span> SPACE</p>
+        <p><span class="footer-key">PAUSE</span> P / ESC</p>
       </footer>
     </main>
   </body>
