@@ -3,25 +3,32 @@
 const canvas = document.getElementById("game-canvas");
 const ctx = canvas.getContext("2d");
 
-const scoreValue = document.getElementById("score-value");
-const bestValue = document.getElementById("best-value");
-const livesValue = document.getElementById("lives-value");
-const threatValue = document.getElementById("threat-value");
-const waveValue = document.getElementById("wave-value");
-const powerupValue = document.getElementById("powerup-value");
-const waveProgressFill = document.getElementById("wave-progress-fill");
+const $ = selector => document.querySelector(selector);
 
-const overlay = document.getElementById("game-overlay");
-const overlayEyebrow = document.getElementById("overlay-eyebrow");
-const overlayTitle = document.getElementById("overlay-title");
-const overlayMessage = document.getElementById("overlay-message");
-const startButton = document.getElementById("start-button");
+const scoreValue = $("#score-value");
+const bestValue = $("#best-value");
+const livesValue = $("#lives-value");
+const threatValue = $("#threat-value");
+const waveValue = $("#wave-value");
+const powerupValue = $("#powerup-value");
+const waveProgressFill = $("#wave-progress-fill");
 
-const soundButton = document.getElementById("sound-button");
-const pauseButton = document.getElementById("pause-button");
-const statusLabel = document.getElementById("status-label");
-const statusChip = document.querySelector(".status-chip");
-const fireButton = document.getElementById("fire-button");
+const bossPanel = $("#boss-panel");
+const bossName = $("#boss-name");
+const bossHealthText = $("#boss-health-text");
+const bossHealthFill = $("#boss-health-fill");
+
+const overlay = $("#game-overlay");
+const overlayEyebrow = $("#overlay-eyebrow");
+const overlayTitle = $("#overlay-title");
+const overlayMessage = $("#overlay-message");
+const startButton = $("#start-button");
+
+const soundButton = $("#sound-button");
+const pauseButton = $("#pause-button");
+const statusLabel = $("#status-label");
+const statusChip = $(".status-chip");
+const fireButton = $("#fire-button");
 
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
@@ -38,6 +45,7 @@ const INITIAL_ENEMY_SPEED = 95;
 const MAX_ENEMY_SPEED = 220;
 
 const WAVE_DURATION = 20;
+const BOSS_EVERY_WAVES = 3;
 const POWERUP_DURATION = 8;
 const MAX_PARTICLES = 650;
 const BEST_SCORE_KEY = "neon-strike-best-score";
@@ -55,16 +63,19 @@ let wave = 1;
 let elapsedTime = 0;
 let waveTime = 0;
 let spawnTimer = 0;
-let powerupSpawnTimer = 8;
+let powerupSpawnTimer = 7;
 let fireTimer = 0;
 let damageCooldown = 0;
 let lastFrameTime = 0;
 let animationId = 0;
+let boss = null;
+let bossDefeatedCount = 0;
 
 let soundEnabled = true;
 let audioContext = null;
 
 let bullets = [];
+let enemyBullets = [];
 let enemies = [];
 let particles = [];
 let powerups = [];
@@ -134,6 +145,25 @@ function updatePowerupUI() {
   powerupValue.textContent = active.join(" · ") || "NONE";
 }
 
+function updateWaveUI() {
+  waveValue.textContent = String(wave).padStart(2, "0");
+  waveProgressFill.style.width = `${Math.min(100, (waveTime / WAVE_DURATION) * 100)}%`;
+}
+
+function updateBossUI() {
+  if (!boss) {
+    bossPanel.hidden = true;
+    return;
+  }
+
+  bossPanel.hidden = false;
+  bossName.textContent = boss.name;
+
+  const ratio = Math.max(0, boss.hp / boss.maxHp);
+  bossHealthFill.style.width = `${ratio * 100}%`;
+  bossHealthText.textContent = `${Math.ceil(ratio * 100)}%`;
+}
+
 function getSpawnInterval() {
   const waveAdjustment = Math.min(0.25, (wave - 1) * 0.035);
   const scoreAdjustment = (threatLevel - 1) * 0.055;
@@ -163,7 +193,7 @@ function showOverlay({ eyebrow, title, message, button, hint }) {
   overlayMessage.textContent = message;
   startButton.textContent = button || "";
   startButton.hidden = !button;
-  overlay.querySelector(".overlay-hint").textContent = hint;
+  $(".overlay-hint").textContent = hint;
   overlay.classList.remove("is-hidden");
 }
 
@@ -208,11 +238,14 @@ function resetGame() {
   powerupSpawnTimer = 7;
   fireTimer = 0;
   damageCooldown = 0;
+  boss = null;
+  bossDefeatedCount = 0;
 
   effects.rapidFire = 0;
   effects.shield = 0;
 
   bullets = [];
+  enemyBullets = [];
   enemies = [];
   particles = [];
   powerups = [];
@@ -224,11 +257,7 @@ function resetGame() {
   updateLives();
   updatePowerupUI();
   updateWaveUI();
-}
-
-function updateWaveUI() {
-  waveValue.textContent = String(wave).padStart(2, "0");
-  waveProgressFill.style.width = `${Math.min(100, (waveTime / WAVE_DURATION) * 100)}%`;
+  updateBossUI();
 }
 
 function startGame() {
@@ -290,7 +319,7 @@ function endGame() {
   showOverlay({
     eyebrow: "MISSION FAILED",
     title: "Grid <span>Compromised.</span>",
-    message: `Final score: ${score}. Best score: ${bestScore}. Wave reached: ${wave}.`,
+    message: `Score: ${score}. Best: ${bestScore}. Wave: ${wave}. Bosses defeated: ${bossDefeatedCount}.`,
     button: "PLAY AGAIN",
     hint: "PRESS ENTER TO RESTART",
   });
@@ -351,7 +380,6 @@ function playTone(frequency, duration, type = "sine", volume = 0.04) {
 
     oscillator.connect(gain);
     gain.connect(audio.destination);
-
     oscillator.start(now);
     oscillator.stop(now + duration);
   } catch {
@@ -373,10 +401,8 @@ function isControlPressed(name) {
 }
 
 function fireBullet() {
-  const spread = effects.rapidFire > 0 ? 4 : 0;
-
   bullets.push({
-    x: player.x + (Math.random() - 0.5) * spread,
+    x: player.x + (effects.rapidFire > 0 ? (Math.random() - 0.5) * 4 : 0),
     y: player.y - player.radius - 7,
     radius: 3,
     speed: 480,
@@ -437,9 +463,13 @@ function spawnEnemy() {
   });
 }
 
-function spawnPowerup(x = Math.random() * (WIDTH - 50) + 25, y = -20) {
+function spawnPowerup(
+  x = Math.random() * (WIDTH - 50) + 25,
+  y = -20,
+  forcedType = null,
+) {
   const types = ["rapid", "shield", "repair"];
-  const type = types[Math.floor(Math.random() * types.length)];
+  const type = forcedType || types[Math.floor(Math.random() * types.length)];
 
   powerups.push({
     type,
@@ -516,6 +546,111 @@ function activatePowerup(type) {
   updatePowerupUI();
 }
 
+function startBossFight() {
+  if (boss || state !== "running") return;
+
+  enemies = [];
+  enemyBullets = [];
+  spawnTimer = 1.5;
+
+  const bossNumber = Math.floor(wave / BOSS_EVERY_WAVES);
+  const maxHp = 30 + bossNumber * 12;
+
+  boss = {
+    name: bossNumber % 2 === 0 ? "NEON DESTROYER" : "VOID TITAN",
+    x: WIDTH / 2,
+    y: -90,
+    targetY: 105,
+    radius: 48 + Math.min(12, bossNumber * 2),
+    hp: maxHp,
+    maxHp,
+    speed: 90 + Math.min(45, bossNumber * 5),
+    direction: 1,
+    attackTimer: 1.2,
+    pattern: 0,
+    entering: true,
+    flash: 0,
+    phase: Math.random() * Math.PI * 2,
+  };
+
+  updateBossUI();
+  setStatus("BOSS FIGHT");
+
+  playTone(100, 0.65, "sawtooth", 0.05);
+  createExplosion(WIDTH / 2, 75, "#ff4fa3", 28);
+}
+
+function defeatBoss() {
+  if (!boss) return;
+
+  const defeatedBoss = boss;
+  createExplosion(defeatedBoss.x, defeatedBoss.y, "#ff4fa3", 90);
+
+  score += 250 + wave * 25;
+  bossDefeatedCount += 1;
+
+  boss = null;
+  enemyBullets = [];
+  updateBossUI();
+  updateScore();
+
+  // Guaranteed reward after a boss encounter.
+  spawnPowerup(WIDTH / 2, 80, Math.random() > 0.5 ? "shield" : "repair");
+
+  setStatus("BOSS DEFEATED");
+  playTone(440, 0.18, "triangle", 0.05);
+  window.setTimeout(() => {
+    if (state === "running" && !boss) setStatus("IN COMBAT");
+  }, 1400);
+}
+
+function fireBossPattern() {
+  if (!boss) return;
+
+  const originY = boss.y + boss.radius * 0.65;
+
+  if (boss.pattern % 2 === 0) {
+    // Aimed three-shot spread.
+    const baseAngle = Math.atan2(player.y - originY, player.x - boss.x);
+
+    for (const offset of [-0.18, 0, 0.18]) {
+      const angle = baseAngle + offset;
+      const speed = 190 + Math.min(60, wave * 4);
+
+      enemyBullets.push({
+        x: boss.x,
+        y: originY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        radius: 6,
+        color: "#ff4fa3",
+      });
+    }
+  } else {
+    // A fan of projectiles spread across the arena.
+    const count = 7;
+    const spread = 1.05;
+    const startAngle = Math.PI / 2 - spread / 2;
+    const speed = 170 + Math.min(55, wave * 3);
+
+    for (let i = 0; i < count; i++) {
+      const angle = startAngle + (spread * i) / (count - 1);
+
+      enemyBullets.push({
+        x: boss.x,
+        y: originY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        radius: 5,
+        color: "#a78bfa",
+      });
+    }
+  }
+
+  boss.pattern += 1;
+  playTone(170, 0.06, "square", 0.012);
+}
+
 function updatePlayer(deltaTime) {
   let dx = 0;
   let dy = 0;
@@ -546,9 +681,9 @@ function updatePlayer(deltaTime) {
 
   player.invulnerable = Math.max(0, player.invulnerable - deltaTime);
   damageCooldown = Math.max(0, damageCooldown - deltaTime);
-
   effects.rapidFire = Math.max(0, effects.rapidFire - deltaTime);
   effects.shield = Math.max(0, effects.shield - deltaTime);
+
   updatePowerupUI();
 
   fireTimer -= deltaTime;
@@ -568,9 +703,27 @@ function updateBullets(deltaTime) {
       bullets.splice(i, 1);
     }
   }
+
+  for (let i = enemyBullets.length - 1; i >= 0; i--) {
+    const bullet = enemyBullets[i];
+
+    bullet.x += bullet.vx * deltaTime;
+    bullet.y += bullet.vy * deltaTime;
+
+    if (
+      bullet.y - bullet.radius > HEIGHT ||
+      bullet.x + bullet.radius < 0 ||
+      bullet.x - bullet.radius > WIDTH
+    ) {
+      enemyBullets.splice(i, 1);
+    }
+  }
 }
 
 function updateEnemies(deltaTime) {
+  // Regular enemy waves are suspended while a boss is active.
+  if (boss) return;
+
   spawnTimer -= deltaTime;
 
   if (spawnTimer <= 0) {
@@ -595,6 +748,54 @@ function updateEnemies(deltaTime) {
   }
 }
 
+function updateBoss(deltaTime) {
+  if (!boss) return;
+
+  boss.flash = Math.max(0, boss.flash - deltaTime);
+
+  if (boss.entering) {
+    boss.y += 90 * deltaTime;
+
+    if (boss.y >= boss.targetY) {
+      boss.y = boss.targetY;
+      boss.entering = false;
+    }
+  } else {
+    boss.x += boss.direction * boss.speed * deltaTime;
+
+    if (boss.x >= WIDTH - boss.radius - 8) {
+      boss.x = WIDTH - boss.radius - 8;
+      boss.direction = -1;
+    } else if (boss.x <= boss.radius + 8) {
+      boss.x = boss.radius + 8;
+      boss.direction = 1;
+    }
+
+    boss.y = boss.targetY + Math.sin(elapsedTime * 1.8 + boss.phase) * 12;
+
+    boss.attackTimer -= deltaTime;
+
+    if (boss.attackTimer <= 0) {
+      fireBossPattern();
+      boss.attackTimer = Math.max(0.58, 1.35 - wave * 0.035);
+    }
+  }
+
+  // Contact with the boss also damages the player.
+  if (
+    player.invulnerable <= 0 &&
+    circlesOverlap(player, {
+      x: boss.x,
+      y: boss.y,
+      radius: boss.radius * 0.78,
+    })
+  ) {
+    damagePlayer();
+  }
+
+  updateBossUI();
+}
+
 function updatePowerups(deltaTime) {
   for (let i = powerups.length - 1; i >= 0; i--) {
     const powerup = powerups[i];
@@ -614,19 +815,22 @@ function updatePowerups(deltaTime) {
     }
   }
 
+  if (boss) return;
+
   powerupSpawnTimer -= deltaTime;
 
   if (powerupSpawnTimer <= 0) {
-    // Avoid letting uncollected drops fill the entire screen.
-    if (powerups.length < 3) {
-      spawnPowerup();
-    }
-
+    if (powerups.length < 3) spawnPowerup();
     powerupSpawnTimer = 10 + Math.random() * 5;
   }
 }
 
 function updateWave(deltaTime) {
+  if (boss) {
+    updateWaveUI();
+    return;
+  }
+
   waveTime += deltaTime;
 
   if (waveTime >= WAVE_DURATION) {
@@ -635,6 +839,10 @@ function updateWave(deltaTime) {
 
     createExplosion(WIDTH / 2, 42, "#48f2ff", 24);
     playTone(580, 0.18, "triangle", 0.04);
+
+    if (wave % BOSS_EVERY_WAVES === 0) {
+      startBossFight();
+    }
   }
 
   updateWaveUI();
@@ -650,9 +858,7 @@ function updateParticles(deltaTime) {
     particle.vy *= Math.pow(0.06, deltaTime);
     particle.life -= deltaTime;
 
-    if (particle.life <= 0) {
-      particles.splice(i, 1);
-    }
+    if (particle.life <= 0) particles.splice(i, 1);
   }
 }
 
@@ -696,22 +902,56 @@ function checkCollisions() {
           enemy.color,
           enemy.type === "tank" ? 30 : 18,
         );
-
         score += enemy.points;
         updateScore();
+        playTone(300, 0.1, "triangle", 0.025);
 
-        playTone(enemy.type === "tank" ? 220 : 300, 0.1, "triangle", 0.025);
-
-        // Small chance for destroyed enemies to drop a power-up.
         if (Math.random() < 0.12 && powerups.length < 3) {
           spawnPowerup(enemy.x, enemy.y);
         }
       } else {
         createExplosion(enemy.x, enemy.y, enemy.color, 5);
-        playTone(230, 0.04, "sine", 0.015);
       }
 
       break;
+    }
+  }
+
+  if (boss) {
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      const bullet = bullets[i];
+
+      if (
+        !circlesOverlap(bullet, {
+          x: boss.x,
+          y: boss.y,
+          radius: boss.radius * 0.82,
+        })
+      ) {
+        continue;
+      }
+
+      bullets.splice(i, 1);
+      boss.hp -= bullet.damage;
+      boss.flash = 0.08;
+
+      createExplosion(bullet.x, bullet.y, "#ff8ac5", 3);
+
+      if (boss.hp <= 0) {
+        defeatBoss();
+        break;
+      }
+    }
+  }
+
+  for (let i = enemyBullets.length - 1; i >= 0; i--) {
+    const bullet = enemyBullets[i];
+
+    if (player.invulnerable <= 0 && circlesOverlap(player, bullet)) {
+      enemyBullets.splice(i, 1);
+      damagePlayer();
+
+      if (state !== "running") return;
     }
   }
 }
@@ -734,6 +974,10 @@ function update(deltaTime) {
   updatePlayer(deltaTime);
   updateBullets(deltaTime);
   updateEnemies(deltaTime);
+
+  if (state !== "running") return;
+
+  updateBoss(deltaTime);
 
   if (state !== "running") return;
 
@@ -829,7 +1073,6 @@ function drawPlayer() {
 
   ctx.shadowBlur = 0;
   ctx.fillStyle = "#eafcff";
-
   ctx.beginPath();
   ctx.moveTo(0, -PLAYER_SIZE + 3);
   ctx.lineTo(5, 7);
@@ -851,6 +1094,17 @@ function drawBullets() {
     ctx.shadowColor = effects.rapidFire > 0 ? "#ffd166" : "#48f2ff";
     ctx.fillStyle = effects.rapidFire > 0 ? "#fff0b5" : "#d9fcff";
     ctx.fillRect(bullet.x - 2, bullet.y - 8, 4, 13);
+    ctx.restore();
+  }
+
+  for (const bullet of enemyBullets) {
+    ctx.save();
+    ctx.shadowBlur = 14;
+    ctx.shadowColor = bullet.color;
+    ctx.fillStyle = bullet.color;
+    ctx.beginPath();
+    ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 }
@@ -895,12 +1149,6 @@ function drawEnemies() {
       ctx.stroke();
     }
 
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = "#fff0fa";
-    ctx.beginPath();
-    ctx.arc(0, 0, enemy.type === "tank" ? 5 : 3, 0, Math.PI * 2);
-    ctx.fill();
-
     ctx.restore();
 
     if (enemy.type === "tank" && enemy.hp < enemy.maxHp) {
@@ -919,6 +1167,59 @@ function drawEnemies() {
       );
     }
   }
+}
+
+function drawBoss() {
+  if (!boss) return;
+
+  ctx.save();
+  ctx.translate(boss.x, boss.y);
+
+  const pulse = 1 + Math.sin(elapsedTime * 5) * 0.035;
+  ctx.scale(pulse, pulse);
+
+  ctx.shadowBlur = 35;
+  ctx.shadowColor = boss.flash > 0 ? "#ffffff" : "#ff4fa3";
+  ctx.fillStyle = boss.flash > 0 ? "#ffffff" : "#35122e";
+  ctx.strokeStyle = boss.flash > 0 ? "#ffffff" : "#ff4fa3";
+  ctx.lineWidth = 4;
+
+  // Main armored body.
+  ctx.beginPath();
+  ctx.moveTo(0, -boss.radius);
+  ctx.lineTo(boss.radius * 0.8, -boss.radius * 0.55);
+  ctx.lineTo(boss.radius, boss.radius * 0.15);
+  ctx.lineTo(boss.radius * 0.65, boss.radius * 0.75);
+  ctx.lineTo(0, boss.radius);
+  ctx.lineTo(-boss.radius * 0.65, boss.radius * 0.75);
+  ctx.lineTo(-boss.radius, boss.radius * 0.15);
+  ctx.lineTo(-boss.radius * 0.8, -boss.radius * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.shadowBlur = 20;
+  ctx.fillStyle = "#ff4fa3";
+  ctx.beginPath();
+  ctx.moveTo(0, -boss.radius * 0.52);
+  ctx.lineTo(boss.radius * 0.42, 0);
+  ctx.lineTo(0, boss.radius * 0.4);
+  ctx.lineTo(-boss.radius * 0.42, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(0, 0, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Side cannons.
+  ctx.fillStyle = "#a78bfa";
+  ctx.fillRect(-boss.radius - 5, -8, 12, 24);
+  ctx.fillRect(boss.radius - 7, -8, 12, 24);
+
+  ctx.restore();
 }
 
 function getPowerupColor(type) {
@@ -1003,12 +1304,13 @@ function render() {
   drawPowerups();
   drawBullets();
   drawEnemies();
+  drawBoss();
 
   if (state !== "gameover") {
     drawPlayer();
   }
 
-  if (state === "running") {
+  if (state === "running" && !boss) {
     drawWaveBanner();
   }
 
@@ -1036,11 +1338,8 @@ function gameLoop(timestamp) {
 }
 
 function setControl(control, pressed) {
-  if (pressed) {
-    touchControls.add(control);
-  } else {
-    touchControls.delete(control);
-  }
+  if (pressed) touchControls.add(control);
+  else touchControls.delete(control);
 }
 
 document.querySelectorAll("[data-control]").forEach(button => {
@@ -1124,10 +1423,7 @@ window.addEventListener("keydown", event => {
 
 window.addEventListener("keyup", event => {
   const control = keyMap[event.code];
-
-  if (control) {
-    keys.delete(control);
-  }
+  if (control) keys.delete(control);
 });
 
 window.addEventListener("blur", () => {
@@ -1160,12 +1456,13 @@ updateScore();
 updateLives();
 updatePowerupUI();
 updateWaveUI();
+updateBossUI();
 setStatus("READY");
 
 showOverlay({
   eyebrow: "SYSTEM READY",
   title: "Ready to <span>Strike?</span>",
-  message: "Destroy enemies, survive the waves, and collect power-ups.",
+  message: "Destroy enemies, survive the waves, and defeat the Void Titan.",
   button: "START GAME",
   hint: "WASD / ARROWS TO MOVE · SPACE TO FIRE",
 });
