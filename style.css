@@ -164,3 +164,7 @@ kbd {
     font-size: 10px;
   }
 }
+
+.game-overlay[hidden] {
+  display: none;
+}
